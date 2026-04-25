@@ -57,8 +57,9 @@ namespace UniverseLib
                 object result = addUnityComponent.Invoke(null, new object[] { typeof(UniversalBehaviour) });
                 if (result != null)
                 {
-                    // Use UniverseLib's own casting helpers to get the concrete type.
-                    Instance = result.TryCast<UniversalBehaviour>();
+                    // ReflectionUtility is initialized after UniversalBehaviour.Setup, so do
+                    // not use UniverseLib's TryCast helpers in this early bootstrap path.
+                    Instance = result as UniversalBehaviour;
                 }
 
                 if (Instance != null)
