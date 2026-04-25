@@ -94,6 +94,15 @@ namespace UniverseLib
             if (logHandler != null && Universe.logHandler == null)
                 Universe.logHandler = logHandler;
 
+#if CPP
+            // Extra diagnostics for CoreCLR/IL2CPP loaders (e.g. macOS arm64).
+            Log($"[Universe.Init] startupDelay={startupDelay}, Context={Context}, State={CurrentGlobalState}");
+            Log($"[Universe.Init] Config: Unhollowed_Modules_Folder='{config.Unhollowed_Modules_Folder}', " +
+                $"Disable_EventSystem_Override={config.Disable_EventSystem_Override}, " +
+                $"Force_Unlock_Mouse={config.Force_Unlock_Mouse}, " +
+                $"Disable_Setup_Force_ReLoad_ManagedAssemblies={config.Disable_Setup_Force_ReLoad_ManagedAssemblies}");
+#endif
+
             if (CurrentGlobalState == GlobalState.WaitingToSetup)
             {
                 CurrentGlobalState = GlobalState.SettingUp;
