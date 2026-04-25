@@ -23,11 +23,38 @@ namespace UniverseLib
         internal static void Setup()
         {
 #if CPP && INTEROP
-            // On CoreCLR-based IL2CPP loaders (like BepInEx 6 IL2CPP on macOS arm64),
-            // avoid our own injection path entirely and delegate to BepInEx's
-            // IL2CPPChainloader.AddUnityComponent(Type) helper, which is known to be safe.
             Universe.Log($"[UniversalBehaviour] Setup() (Interop) begin. Context={Universe.Context}, State={Universe.CurrentGlobalState}");
 
+            if (TrySetupViaBepInExChainloader())
+                return;
+
+            Universe.LogWarning("[UniversalBehaviour] Falling back to direct typed GameObject.AddComponent<UniversalBehaviour>() setup.");
+#endif
+
+#if CPP
+            ClassInjector.RegisterTypeInIl2Cpp<UniversalBehaviour>();
+#endif
+
+            GameObject obj = new("UniverseLibBehaviour");
+            GameObject.DontDestroyOnLoad(obj);
+            obj.hideFlags |= HideFlags.HideAndDontSave;
+            Instance = obj.AddComponent<UniversalBehaviour>();
+
+#if CPP && INTEROP
+            if (Instance != null)
+            {
+                Universe.Log("[UniversalBehaviour] Successfully attached via direct typed GameObject.AddComponent<UniversalBehaviour>().");
+            }
+            else
+            {
+                Universe.LogWarning("[UniversalBehaviour] Direct typed AddComponent<UniversalBehaviour>() returned null.");
+            }
+#endif
+        }
+
+#if CPP && INTEROP
+        private static bool TrySetupViaBepInExChainloader()
+        {
             try
             {
                 const string chainloaderTypeName =
@@ -36,8 +63,8 @@ namespace UniverseLib
                 Type chainloaderType = Type.GetType(chainloaderTypeName, throwOnError: false);
                 if (chainloaderType == null)
                 {
-                    Universe.LogWarning("[UniversalBehaviour] IL2CPPChainloader type not found; aborting Setup.");
-                    return;
+                    Universe.LogWarning("[UniversalBehaviour] IL2CPPChainloader type not found.");
+                    return false;
                 }
 
                 MethodInfo addUnityComponent =
@@ -50,8 +77,8 @@ namespace UniverseLib
 
                 if (addUnityComponent == null)
                 {
-                    Universe.LogWarning("[UniversalBehaviour] AddUnityComponent(Type) overload not found; aborting Setup.");
-                    return;
+                    Universe.LogWarning("[UniversalBehaviour] AddUnityComponent(Type) overload not found.");
+                    return false;
                 }
 
                 object result = addUnityComponent.Invoke(null, new object[] { typeof(UniversalBehaviour) });
@@ -64,27 +91,20 @@ namespace UniverseLib
                 if (Instance != null)
                 {
                     Universe.Log("[UniversalBehaviour] Successfully attached via IL2CPPChainloader.AddUnityComponent(typeof(UniversalBehaviour)).");
+                    return true;
                 }
-                else
-                {
-                    Universe.LogWarning("[UniversalBehaviour] AddUnityComponent(typeof(UniversalBehaviour)) returned null or wrong type; aborting Setup.");
-                }
+
+                string resultType = result?.GetType().FullName ?? "<null>";
+                Universe.LogWarning($"[UniversalBehaviour] AddUnityComponent(typeof(UniversalBehaviour)) returned {resultType}, not UniversalBehaviour.");
+                return false;
             }
             catch (Exception ex)
             {
                 Universe.LogWarning($"[UniversalBehaviour] Exception in Setup using IL2CPPChainloader.AddUnityComponent(Type): {ex}");
+                return false;
             }
-#else
-#if CPP
-            ClassInjector.RegisterTypeInIl2Cpp<UniversalBehaviour>();
-#endif
-
-            GameObject obj = new("UniverseLibBehaviour");
-            GameObject.DontDestroyOnLoad(obj);
-            obj.hideFlags |= HideFlags.HideAndDontSave;
-            Instance = obj.AddComponent<UniversalBehaviour>();
-#endif
         }
+#endif
 
         internal void Update()
         {
