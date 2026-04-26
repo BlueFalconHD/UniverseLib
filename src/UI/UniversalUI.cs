@@ -27,6 +27,13 @@ public static class UniversalUI
         "GUI/Text Shader"
     };
 
+    private static readonly string[] TextShaderCandidates =
+    {
+        "GUI/Text Shader",
+        "UI/Default",
+        "Sprites/Default"
+    };
+
     internal static readonly Dictionary<string, UIBase> registeredUIs = new();
     internal static readonly List<UIBase> uiBases = new();
 
@@ -53,6 +60,9 @@ public static class UniversalUI
 
     /// <summary>The backup UI shader, if it was loaded.</summary>
     public static Shader BackupShader { get; private set; }
+
+    /// <summary>The scale factor applied to registered UniverseLib canvases.</summary>
+    public static float UIScale { get; set; } = 2.0f;
 
     /// <summary>The default color used by UniverseLib for enabled buttons.</summary>
     public static Color EnabledButtonColor { get; } = new(0.2f, 0.4f, 0.28f);
@@ -134,15 +144,16 @@ public static class UniversalUI
         if (!AnyUIShowing)
             return;
 
-        // Prevent click-through
-        if (EventSys.IsPointerOverGameObject())
+        // Prevent click-through into the game while an overlay UI is visible.
+        bool hasPointerInput = InputManager.MouseScrollDelta.y != 0
+            || InputManager.GetMouseButtonDown(0)
+            || InputManager.GetMouseButtonDown(1)
+            || InputManager.GetMouseButtonUp(0)
+            || InputManager.GetMouseButtonUp(1);
+
+        if (hasPointerInput)
         {
-            if (InputManager.MouseScrollDelta.y != 0
-                || InputManager.GetMouseButtonUp(0)
-                || InputManager.GetMouseButtonUp(1))
-            {
-                InputManager.ResetInputAxes();
-            }
+            InputManager.ResetInputAxes();
         }
 
         InputManager.Update();
@@ -233,6 +244,7 @@ public static class UniversalUI
         {
             Universe.LogWarning("Could not load the UniverseLib UI Bundle!");
             DefaultFont = ConsoleFont = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            PrepareFontMaterial(DefaultFont);
             return;
         }
 
@@ -245,6 +257,9 @@ public static class UniversalUI
         DefaultFont = UIBundle.LoadAsset<Font>("arial");
         DefaultFont.hideFlags = HideFlags.HideAndDontSave;
         UnityEngine.Object.DontDestroyOnLoad(DefaultFont);
+
+        PrepareFontMaterial(ConsoleFont);
+        PrepareFontMaterial(DefaultFont);
 
         Shader bundledShader = UIBundle.LoadAsset<Shader>("DefaultUI");
         if (bundledShader != null)
@@ -392,6 +407,31 @@ public static class UniversalUI
             Universe.LogWarning($"Exception unloading AssetBundles: {ex}");
         }
 
+        return false;
+    }
+
+    static void PrepareFontMaterial(Font font)
+    {
+        if (font == null || font.material == null)
+            return;
+
+        if (TryFindSupportedTextShader(out Shader textShader))
+            font.material.shader = textShader;
+
+        if (font.material.HasProperty("_Color"))
+            font.material.color = Color.white;
+    }
+
+    static bool TryFindSupportedTextShader(out Shader shader)
+    {
+        foreach (string shaderName in TextShaderCandidates)
+        {
+            shader = Shader.Find(shaderName);
+            if (shader != null && shader.isSupported)
+                return true;
+        }
+
+        shader = null;
         return false;
     }
 }

@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections;
 using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.UI;
@@ -18,6 +19,10 @@ namespace UniverseLib.UI
         internal static Vector2 largeElementSize = new(100, 30);
         internal static Vector2 smallElementSize = new(25, 25);
         internal static Color defaultTextColor = Color.white;
+        internal static readonly Color DropdownBackgroundColor = new(0.04f, 0.04f, 0.04f, 0.95f);
+        internal static readonly Color DropdownItemColor = new(0.16f, 0.16f, 0.16f, 1.0f);
+        internal static readonly Color DropdownItemHighlightColor = new(0.28f, 0.38f, 0.28f, 1.0f);
+        internal static readonly Color DropdownItemPressedColor = new(0.11f, 0.22f, 0.11f, 1.0f);
 
         /// <summary>
         /// Create a simple UI object with a RectTransform. <paramref name="parent"/> can be null.
@@ -48,7 +53,80 @@ namespace UniverseLib.UI
         {
             text.color = defaultTextColor;
             text.font = UniversalUI.DefaultFont;
+            if (UniversalUI.DefaultFont && UniversalUI.DefaultFont.material)
+                text.material = UniversalUI.DefaultFont.material;
             text.fontSize = 14;
+        }
+
+        private static void SetDropdownTextValues(Text text)
+        {
+            SetDefaultTextValues(text);
+            text.color = Color.white;
+        }
+
+        private static IEnumerator KeepDropdownListReadable(GameObject dropdownObj)
+        {
+            while (dropdownObj)
+            {
+                Transform listTransform = dropdownObj.transform.Find("Dropdown List");
+                GameObject listObj = listTransform ? listTransform.gameObject : null;
+
+                if (listObj)
+                    StyleDropdownList(listObj);
+
+                yield return null;
+            }
+        }
+
+        private static void StyleDropdownList(GameObject listObj)
+        {
+            foreach (CanvasGroup canvasGroup in listObj.GetComponentsInChildren<CanvasGroup>(true))
+            {
+                canvasGroup.alpha = 1f;
+                canvasGroup.interactable = true;
+                canvasGroup.blocksRaycasts = true;
+            }
+
+            foreach (Transform transform in listObj.GetComponentsInChildren<Transform>(true))
+            {
+                if (transform.gameObject.name != "Item")
+                    continue;
+
+                Transform itemBackground = transform.Find("Item Background");
+                if (itemBackground)
+                    itemBackground.SetAsFirstSibling();
+
+                Transform itemLabel = transform.Find("Item Label");
+                if (itemLabel)
+                    itemLabel.SetAsLastSibling();
+            }
+
+            foreach (Image image in listObj.GetComponentsInChildren<Image>(true))
+            {
+                string objectName = image.gameObject.name;
+                if (objectName == "Item Background")
+                {
+                    image.color = DropdownItemColor;
+                    image.raycastTarget = false;
+                }
+                else if (objectName == "Dropdown List" || objectName == "Template" || objectName == "Viewport" || objectName == "Content")
+                {
+                    image.color = DropdownBackgroundColor;
+                    image.raycastTarget = false;
+                }
+            }
+
+            foreach (Toggle toggle in listObj.GetComponentsInChildren<Toggle>(true))
+            {
+                RuntimeHelper.Instance.Internal_SetColorBlock(toggle,
+                    DropdownItemColor, DropdownItemHighlightColor, DropdownItemPressedColor, DropdownBackgroundColor);
+            }
+
+            foreach (Text text in listObj.GetComponentsInChildren<Text>(true))
+            {
+                SetDropdownTextValues(text);
+                text.transform.SetAsLastSibling();
+            }
         }
 
         internal static void SetDefaultSelectableValues(Selectable selectable)
@@ -613,13 +691,13 @@ namespace UniverseLib.UI
             scrollRectTransform.sizeDelta = new Vector2(scrollRectTransform.sizeDelta.x, 0f);
 
             Text itemLabelText = itemLabelObj.AddComponent<Text>();
-            SetDefaultTextValues(itemLabelText);
+            SetDropdownTextValues(itemLabelText);
             itemLabelText.alignment = TextAnchor.MiddleLeft;
             itemLabelText.text = defaultItemText;
             itemLabelText.fontSize = itemFontSize;
 
             Text arrowText = arrowObj.AddComponent<Text>();
-            SetDefaultTextValues(arrowText);
+            SetDropdownTextValues(arrowText);
             arrowText.text = "▼";
             RectTransform arrowRect = arrowObj.GetComponent<RectTransform>();
             arrowRect.anchorMin = new Vector2(1f, 0.5f);
@@ -628,18 +706,18 @@ namespace UniverseLib.UI
             arrowRect.anchoredPosition = new Vector2(-15f, 0f);
 
             Image itemBgImage = itemBgObj.AddComponent<Image>();
-            itemBgImage.color = new Color(0.25f, 0.35f, 0.25f, 1.0f);
+            itemBgImage.color = DropdownItemColor;
 
             Toggle itemToggle = itemObj.AddComponent<Toggle>();
             itemToggle.targetGraphic = itemBgImage;
             itemToggle.isOn = true;
             RuntimeHelper.Instance.Internal_SetColorBlock(itemToggle,
-                new Color(0.35f, 0.35f, 0.35f, 1.0f), new Color(0.25f, 0.55f, 0.25f, 1.0f));
+                DropdownItemColor, DropdownItemHighlightColor, DropdownItemPressedColor, DropdownBackgroundColor);
 
             itemToggle.onValueChanged.AddListener((bool val) => { itemToggle.OnDeselect(null); });
             Image templateImage = templateObj.AddComponent<Image>();
             templateImage.type = Image.Type.Sliced;
-            templateImage.color = Color.black;
+            templateImage.color = DropdownBackgroundColor;
 
             ScrollRect scrollRect = templateObj.AddComponent<ScrollRect>();
             scrollRect.scrollSensitivity = 35;
@@ -655,13 +733,19 @@ namespace UniverseLib.UI
 
             Image viewportImage = viewportObj.AddComponent<Image>();
             viewportImage.type = Image.Type.Sliced;
+            viewportImage.color = DropdownBackgroundColor;
+            viewportImage.raycastTarget = false;
+
+            Image contentImage = contentObj.AddComponent<Image>();
+            contentImage.color = DropdownBackgroundColor;
+            contentImage.raycastTarget = false;
 
             Text labelText = labelObj.AddComponent<Text>();
-            SetDefaultTextValues(labelText);
+            SetDropdownTextValues(labelText);
             labelText.alignment = TextAnchor.MiddleLeft;
 
             Image dropdownImage = dropdownObj.AddComponent<Image>();
-            dropdownImage.color = new Color(0.04f, 0.04f, 0.04f, 0.75f);
+            dropdownImage.color = new Color(0.04f, 0.04f, 0.04f, 0.85f);
             dropdownImage.type = Image.Type.Sliced;
 
             dropdown = dropdownObj.AddComponent<Dropdown>();
@@ -669,6 +753,7 @@ namespace UniverseLib.UI
             dropdown.template = templateObj.GetComponent<RectTransform>();
             dropdown.captionText = labelText;
             dropdown.itemText = itemLabelText;
+            dropdown.alphaFadeSpeed = 0f;
             //itemLabelText.text = "DEFAULT";
 
             dropdown.RefreshShownValue();
@@ -724,6 +809,8 @@ namespace UniverseLib.UI
                 foreach (string option in defaultOptions)
                     dropdown.options.Add(new Dropdown.OptionData(option));
             }
+
+            RuntimeHelper.StartCoroutine(KeepDropdownListReadable(dropdownObj));
 
             return dropdownObj;
         }
