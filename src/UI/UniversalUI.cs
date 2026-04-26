@@ -17,6 +17,16 @@ namespace UniverseLib.UI;
 /// <summary>Handles all <see cref="UIBase"/> UIs on the UniverseLib UI canvas.</summary>
 public static class UniversalUI
 {
+    private static readonly string[] UIShaderCandidates =
+    {
+        "UI/Default",
+        "Sprites/Default",
+        "Unlit/Transparent",
+        "Unlit/Texture",
+        "Hidden/Internal-GUITexture",
+        "GUI/Text Shader"
+    };
+
     internal static readonly Dictionary<string, UIBase> registeredUIs = new();
     internal static readonly List<UIBase> uiBases = new();
 
@@ -236,18 +246,67 @@ public static class UniversalUI
         DefaultFont.hideFlags = HideFlags.HideAndDontSave;
         UnityEngine.Object.DontDestroyOnLoad(DefaultFont);
 
-        BackupShader = UIBundle.LoadAsset<Shader>("DefaultUI");
-        BackupShader.hideFlags = HideFlags.HideAndDontSave;
-        UnityEngine.Object.DontDestroyOnLoad(BackupShader);
-        // Fix for games which don't ship with 'UI/Default' shader.
-        if (Graphic.defaultGraphicMaterial.shader != null &&
-            Graphic.defaultGraphicMaterial.shader.name != "UI/Default")
+        Shader bundledShader = UIBundle.LoadAsset<Shader>("DefaultUI");
+        if (bundledShader != null)
         {
-            Universe.Log("This game does not ship with the 'UI/Default' shader, using manual Default Shader...");
-            Graphic.defaultGraphicMaterial.shader = BackupShader;
+            bundledShader.hideFlags = HideFlags.HideAndDontSave;
+            UnityEngine.Object.DontDestroyOnLoad(bundledShader);
+        }
+        LogShader("Bundled DefaultUI shader", bundledShader);
+
+        Shader runtimeShader = Graphic.defaultGraphicMaterial.shader;
+        LogShader("Runtime default UI shader", runtimeShader);
+        if (runtimeShader != null && runtimeShader.isSupported)
+        {
+            BackupShader = runtimeShader;
+            if (runtimeShader.name != "UI/Default")
+                Universe.Log($"Using existing UI shader '{runtimeShader.name}' instead of bundled DefaultUI.");
+            return;
+        }
+
+        if (TryFindSupportedShader(out Shader builtInShader))
+        {
+            BackupShader = builtInShader;
+            Universe.Log($"Using supported built-in UI shader '{builtInShader.name}' instead of bundled DefaultUI.");
+            Graphic.defaultGraphicMaterial.shader = builtInShader;
+            return;
+        }
+
+        BackupShader = bundledShader;
+        if (bundledShader != null && bundledShader.isSupported)
+        {
+            Universe.Log("This game does not ship a supported UI shader, using bundled DefaultUI shader...");
+            Graphic.defaultGraphicMaterial.shader = bundledShader;
         }
         else
-            BackupShader = Graphic.defaultGraphicMaterial.shader;
+        {
+            Universe.LogWarning("Could not find a supported UI shader; Unity UI may render magenta.");
+        }
+    }
+
+    static void LogShader(string label, Shader shader)
+    {
+        if (shader == null)
+        {
+            Universe.Log($"{label}: <null>");
+            return;
+        }
+
+        Universe.Log($"{label}: name='{shader.name}', isSupported={shader.isSupported}");
+    }
+
+    static bool TryFindSupportedShader(out Shader shader)
+    {
+        foreach (string shaderName in UIShaderCandidates)
+        {
+            shader = Shader.Find(shaderName);
+            LogShader($"Shader.Find('{shaderName}')", shader);
+            if (shader != null && shader.isSupported)
+                return true;
+        }
+
+        shader = null;
+        return false;
     }
 
     static void ForceLoadBundle()
