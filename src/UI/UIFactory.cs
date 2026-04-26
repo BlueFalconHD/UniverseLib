@@ -848,8 +848,9 @@ namespace UniverseLib.UI
             viewportRect.sizeDelta = new Vector2(0f, 0.0f);
             viewportRect.offsetMax = new Vector2(-10.0f, 0.0f);
             viewportObj.AddComponent<RectMask2D>();
-            viewportObj.AddComponent<Image>().color = new(0.1f, 0.1f, 0.1f, 1);
-            viewportObj.AddComponent<Mask>();
+            Image viewportImage = viewportObj.AddComponent<Image>();
+            viewportImage.color = new(0.1f, 0.1f, 0.1f, 0f);
+            viewportImage.raycastTarget = false;
 
             content = CreateUIObject("Content", viewportObj);
             RectTransform contentRect = content.GetComponent<RectTransform>();

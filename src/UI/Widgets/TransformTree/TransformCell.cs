@@ -163,7 +163,7 @@ namespace UniverseLib.UI.Widgets
             GameObject nameBtnHolder = UIFactory.CreateHorizontalGroup(this.UIRoot, "NameButtonHolder",
                 false, false, true, true, childAlignment: TextAnchor.MiddleLeft);
             UIFactory.SetLayoutElement(nameBtnHolder, flexibleWidth: 9999, minHeight: 25, flexibleHeight: 0);
-            nameBtnHolder.AddComponent<Mask>().showMaskGraphic = false;
+            nameBtnHolder.AddComponent<RectMask2D>();
 
             NameButton = UIFactory.CreateButton(nameBtnHolder, "NameButton", "Name", null);
             UIFactory.SetLayoutElement(NameButton.Component.gameObject, flexibleWidth: 9999, minHeight: 25, flexibleHeight: 0);

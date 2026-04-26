@@ -16,7 +16,6 @@ namespace UniverseLib.UI
         public string ID { get; }
         public GameObject RootObject { get; }
         public RectTransform RootRect { get; }
-        private GameObject InputBlocker { get; }
         public Canvas Canvas { get; }
         public Action UpdateMethod { get; }
 
@@ -67,17 +66,6 @@ namespace UniverseLib.UI
             uiRect.anchorMin = Vector2.zero;
             uiRect.anchorMax = Vector2.one;
             uiRect.pivot = new Vector2(0.5f, 0.5f);
-
-            InputBlocker = UIFactory.CreateUIObject("InputBlocker", RootObject);
-            RectTransform blockerRect = InputBlocker.GetComponent<RectTransform>();
-            blockerRect.anchorMin = Vector2.zero;
-            blockerRect.anchorMax = Vector2.one;
-            blockerRect.offsetMin = Vector2.zero;
-            blockerRect.offsetMax = Vector2.zero;
-            blockerRect.sizeDelta = Vector2.zero;
-            Image blockerImage = InputBlocker.AddComponent<Image>();
-            blockerImage.color = new Color(0f, 0f, 0f, 0f);
-            blockerImage.raycastTarget = true;
 
             Panels = CreatePanelManager();
 

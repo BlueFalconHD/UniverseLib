@@ -144,18 +144,6 @@ public static class UniversalUI
         if (!AnyUIShowing)
             return;
 
-        // Prevent click-through into the game while an overlay UI is visible.
-        bool hasPointerInput = InputManager.MouseScrollDelta.y != 0
-            || InputManager.GetMouseButtonDown(0)
-            || InputManager.GetMouseButtonDown(1)
-            || InputManager.GetMouseButtonUp(0)
-            || InputManager.GetMouseButtonUp(1);
-
-        if (hasPointerInput)
-        {
-            InputManager.ResetInputAxes();
-        }
-
         InputManager.Update();
 
         InputFieldRef.UpdateInstances();
