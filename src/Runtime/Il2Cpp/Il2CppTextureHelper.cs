@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using System.Runtime.CompilerServices;
 using UnityEngine;
 using UniverseLib.Config;
 
@@ -27,6 +28,7 @@ internal class Il2CppTextureHelper : TextureHelper
     internal delegate void d_CopyTexture_Region(IntPtr src, int srcElement, int srcMip, int srcX, int srcY,
         int srcWidth, int srcHeight, IntPtr dst, int dstElement, int dstMip, int dstX, int dstY);
 
+    [MethodImpl(MethodImplOptions.NoInlining)]
     protected internal override Texture2D Internal_NewTexture2D(int width, int height)
     {
         try
@@ -39,6 +41,7 @@ internal class Il2CppTextureHelper : TextureHelper
         }
     }
 
+    [MethodImpl(MethodImplOptions.NoInlining)]
     protected internal override Texture2D Internal_NewTexture2D(int width, int height, TextureFormat textureFormat, bool mipChain)
     {
         try
