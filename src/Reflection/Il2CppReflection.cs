@@ -20,7 +20,6 @@ using System.Text.RegularExpressions;
 using UniverseLib.Reflection;
 using System.Diagnostics;
 using UniverseLib.Runtime.Il2Cpp;
-using static Il2CppSystem.Collections.Hashtable;
 
 
 #if INTEROP
