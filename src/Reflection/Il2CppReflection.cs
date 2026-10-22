@@ -20,6 +20,9 @@ using System.Text.RegularExpressions;
 using UniverseLib.Reflection;
 using System.Diagnostics;
 using UniverseLib.Runtime.Il2Cpp;
+using static Il2CppSystem.Collections.Hashtable;
+
+
 #if INTEROP
 using Il2CppInterop.Runtime.InteropTypes;
 using Il2CppInterop.Runtime.InteropTypes.Arrays;
@@ -880,7 +883,7 @@ public class Il2CppReflection : ReflectionUtility
 
             if (typeof(Il2CppSystem.Collections.Hashtable).IsAssignableFrom(type))
             {
-                dictEnumerator = EnumerateCppHashTable(dictionary.TryCast<Il2CppSystem.Collections.Hashtable>());
+                dictEnumerator = EnumerateCppHashTable(dictionary.TryCast<Il2CppSystem.Collections.IEnumerable>());
                 return true;
             }
 
@@ -904,17 +907,25 @@ public class Il2CppReflection : ReflectionUtility
         }
     }
 
-    static IEnumerator<DictionaryEntry> EnumerateCppHashTable(Il2CppSystem.Collections.Hashtable hashtable)
+    static IEnumerator<DictionaryEntry> EnumerateCppHashTable(Il2CppSystem.Collections.IEnumerable? hashtableEnumerable)
     {
-        for (int i = 0; i < hashtable.buckets.Count; i++)
+        if (hashtableEnumerable == null)
         {
-            Il2CppSystem.Collections.Hashtable.bucket bucket = hashtable.buckets[i];
-            if (bucket == null || bucket.key == null)
+            yield break;
+        }
+
+        foreach (var item in hashtableEnumerable)
+        {
+            if (item == null)
             {
                 continue;
             }
-
-            yield return new DictionaryEntry(bucket.key, bucket.val);
+            var entry = item.TryCast<Il2CppSystem.Collections.DictionaryEntry>();
+            if (entry == null || entry.Key == null)
+            {
+                continue;
+            }
+            yield return new DictionaryEntry(entry.Key, entry.Value);
         }
     }
 
