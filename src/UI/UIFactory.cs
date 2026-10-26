@@ -8,6 +8,12 @@ using UniverseLib.UI.Models;
 using UniverseLib.UI.Panels;
 using UniverseLib.UI.Widgets;
 using UniverseLib.UI.Widgets.ScrollView;
+#if INTEROP
+using Il2CppInterop.Runtime;
+#endif
+#if UNHOLLOWER
+using UnhollowerRuntimeLib;
+#endif
 
 namespace UniverseLib.UI
 {
@@ -19,10 +25,16 @@ namespace UniverseLib.UI
         internal static Vector2 largeElementSize = new(100, 30);
         internal static Vector2 smallElementSize = new(25, 25);
         internal static Color defaultTextColor = Color.white;
+        internal static readonly Color InputFieldBackgroundColor = new(0.12f, 0.12f, 0.12f, 0.95f);
+        internal static readonly Color InputFieldDisabledColor = new(0.06f, 0.06f, 0.06f, 0.9f);
+        internal static readonly Color InputFieldSelectionColor = new(0.35f, 0.55f, 0.75f, 0.45f);
         internal static readonly Color DropdownBackgroundColor = new(0.04f, 0.04f, 0.04f, 0.95f);
+        internal static readonly Color DropdownTransparentColor = new(0f, 0f, 0f, 0f);
         internal static readonly Color DropdownItemColor = new(0.16f, 0.16f, 0.16f, 1.0f);
         internal static readonly Color DropdownItemHighlightColor = new(0.28f, 0.38f, 0.28f, 1.0f);
         internal static readonly Color DropdownItemPressedColor = new(0.11f, 0.22f, 0.11f, 1.0f);
+        private const float DropdownListEdgeMargin = 8f;
+        private const float DropdownListMinHeight = 60f;
 
         /// <summary>
         /// Create a simple UI object with a RectTransform. <paramref name="parent"/> can be null.
@@ -64,6 +76,31 @@ namespace UniverseLib.UI
             text.color = Color.white;
         }
 
+        private static void SetInputFieldSelectableValues(InputField inputField, Graphic targetGraphic, Color? backgroundColor = null)
+        {
+            Color normalColor = backgroundColor ?? InputFieldBackgroundColor;
+            Color highlightedColor = new(
+                Mathf.Min(normalColor.r + 0.06f, 1f),
+                Mathf.Min(normalColor.g + 0.06f, 1f),
+                Mathf.Min(normalColor.b + 0.06f, 1f),
+                1f);
+            Color pressedColor = new(
+                Mathf.Max(normalColor.r - 0.04f, 0f),
+                Mathf.Max(normalColor.g - 0.04f, 0f),
+                Mathf.Max(normalColor.b - 0.04f, 0f),
+                1f);
+
+            inputField.selectionColor = InputFieldSelectionColor;
+            inputField.customCaretColor = true;
+            inputField.caretColor = Color.white;
+
+            if (targetGraphic)
+                targetGraphic.color = normalColor;
+
+            RuntimeHelper.Instance.Internal_SetColorBlock(inputField,
+                normalColor, highlightedColor, pressedColor, InputFieldDisabledColor);
+        }
+
         private static IEnumerator KeepDropdownListReadable(GameObject dropdownObj)
         {
             while (dropdownObj)
@@ -72,19 +109,29 @@ namespace UniverseLib.UI
                 GameObject listObj = listTransform ? listTransform.gameObject : null;
 
                 if (listObj)
-                    StyleDropdownList(listObj);
+                    StyleDropdownList(dropdownObj, listObj);
 
                 yield return null;
             }
         }
 
-        private static void StyleDropdownList(GameObject listObj)
+        private static void StyleDropdownList(GameObject dropdownObj, GameObject listObj)
         {
             foreach (CanvasGroup canvasGroup in listObj.GetComponentsInChildren<CanvasGroup>(true))
             {
                 canvasGroup.alpha = 1f;
                 canvasGroup.interactable = true;
                 canvasGroup.blocksRaycasts = true;
+            }
+
+            foreach (Mask mask in listObj.GetComponentsInChildren<Mask>(true))
+            {
+                if (mask.gameObject.name != "Viewport")
+                    continue;
+
+                mask.enabled = false;
+                if (!mask.gameObject.GetComponent<RectMask2D>())
+                    mask.gameObject.AddComponent<RectMask2D>();
             }
 
             foreach (Transform transform in listObj.GetComponentsInChildren<Transform>(true))
@@ -109,7 +156,12 @@ namespace UniverseLib.UI
                     image.color = DropdownItemColor;
                     image.raycastTarget = false;
                 }
-                else if (objectName == "Dropdown List" || objectName == "Template" || objectName == "Viewport" || objectName == "Content")
+                else if (objectName == "Item Checkmark" || objectName == "Viewport" || objectName == "Content")
+                {
+                    image.color = DropdownTransparentColor;
+                    image.raycastTarget = false;
+                }
+                else if (objectName == "Dropdown List" || objectName == "Template")
                 {
                     image.color = DropdownBackgroundColor;
                     image.raycastTarget = false;
@@ -126,6 +178,141 @@ namespace UniverseLib.UI
             {
                 SetDropdownTextValues(text);
                 text.transform.SetAsLastSibling();
+            }
+
+            FitDropdownListToCanvas(dropdownObj, listObj);
+        }
+
+        private static void FitDropdownListToCanvas(GameObject dropdownObj, GameObject listObj)
+        {
+            RectTransform dropdownRect = dropdownObj.GetComponent<RectTransform>();
+            RectTransform listRect = listObj.GetComponent<RectTransform>();
+            if (!dropdownRect || !listRect)
+                return;
+
+#if CPP
+            Canvas canvas = dropdownObj.GetComponentInParent(Il2CppType.Of<Canvas>()).TryCast<Canvas>();
+#else
+            Canvas canvas = dropdownObj.GetComponentInParent<Canvas>();
+#endif
+            if (!canvas)
+                return;
+
+            RectTransform canvasRect = canvas.rootCanvas.GetComponent<RectTransform>();
+            if (!canvasRect)
+                return;
+
+            float contentHeight = ResizeDropdownContent(dropdownObj, listObj);
+            float templateHeight = GetTemplateHeight(dropdownObj);
+            float desiredHeight = Mathf.Max(DropdownListMinHeight, Mathf.Min(contentHeight, templateHeight));
+
+            GetLocalYBounds(dropdownRect, canvasRect, out float dropdownMinY, out float dropdownMaxY);
+
+            Rect canvasLocalRect = canvasRect.rect;
+            float availableBelow = Mathf.Max(0f, dropdownMinY - canvasLocalRect.yMin - DropdownListEdgeMargin);
+            float availableAbove = Mathf.Max(0f, canvasLocalRect.yMax - dropdownMaxY - DropdownListEdgeMargin);
+
+            bool openAbove = availableAbove > availableBelow && desiredHeight > availableBelow;
+            float availableHeight = openAbove ? availableAbove : availableBelow;
+            if (availableHeight < DropdownListMinHeight && !openAbove && availableAbove > availableHeight)
+            {
+                openAbove = true;
+                availableHeight = availableAbove;
+            }
+
+            float heightLimit = availableHeight > 0f ? availableHeight : desiredHeight;
+            float height = Mathf.Min(desiredHeight, heightLimit);
+            if (height <= 0f)
+                height = desiredHeight;
+
+            if (openAbove)
+            {
+                listRect.anchorMin = new Vector2(0f, 1f);
+                listRect.anchorMax = new Vector2(1f, 1f);
+                listRect.pivot = new Vector2(0.5f, 0f);
+                listRect.anchoredPosition = new Vector2(0f, 2f);
+            }
+            else
+            {
+                listRect.anchorMin = new Vector2(0f, 0f);
+                listRect.anchorMax = new Vector2(1f, 0f);
+                listRect.pivot = new Vector2(0.5f, 1f);
+                listRect.anchoredPosition = new Vector2(0f, -2f);
+            }
+
+            listRect.sizeDelta = new Vector2(0f, height);
+        }
+
+        private static float ResizeDropdownContent(GameObject dropdownObj, GameObject listObj)
+        {
+            Dropdown dropdown = dropdownObj.GetComponent<Dropdown>();
+            ScrollRect scrollRect = listObj.GetComponentInChildren<ScrollRect>(true);
+            RectTransform contentRect = scrollRect ? scrollRect.content : null;
+            if (!contentRect)
+            {
+                Transform contentTransform = listObj.transform.Find("Viewport/Content");
+                contentRect = contentTransform ? contentTransform.GetComponent<RectTransform>() : null;
+            }
+
+            int optionCount = dropdown ? dropdown.options.Count : 0;
+            if (contentRect)
+                optionCount = Mathf.Max(optionCount, contentRect.childCount);
+
+            float itemHeight = GetDropdownItemHeight(contentRect);
+            float contentHeight = Mathf.Max(itemHeight, optionCount * itemHeight);
+
+            if (contentRect)
+                contentRect.sizeDelta = new Vector2(contentRect.sizeDelta.x, contentHeight);
+
+            if (scrollRect)
+            {
+                scrollRect.horizontal = false;
+                scrollRect.vertical = true;
+                scrollRect.movementType = ScrollRect.MovementType.Clamped;
+                scrollRect.scrollSensitivity = 35;
+            }
+
+            return contentHeight;
+        }
+
+        private static float GetDropdownItemHeight(RectTransform contentRect)
+        {
+            if (contentRect)
+            {
+                foreach (Toggle toggle in contentRect.GetComponentsInChildren<Toggle>(true))
+                {
+                    RectTransform itemRect = toggle.GetComponent<RectTransform>();
+                    if (itemRect && itemRect.rect.height > 1f)
+                        return itemRect.rect.height;
+                }
+            }
+
+            return 25f;
+        }
+
+        private static float GetTemplateHeight(GameObject dropdownObj)
+        {
+            Transform templateTransform = dropdownObj.transform.Find("Template");
+            RectTransform templateRect = templateTransform ? templateTransform.GetComponent<RectTransform>() : null;
+            if (templateRect && templateRect.rect.height > DropdownListMinHeight)
+                return templateRect.rect.height;
+
+            return 150f;
+        }
+
+        private static void GetLocalYBounds(RectTransform rect, RectTransform root, out float minY, out float maxY)
+        {
+            Vector3[] corners = new Vector3[4];
+            rect.GetWorldCorners(corners);
+
+            minY = float.MaxValue;
+            maxY = float.MinValue;
+
+            for (int i = 0; i < corners.Length; i++)
+            {
+                float y = root.InverseTransformPoint(corners[i]).y;
+                minY = Mathf.Min(minY, y);
+                maxY = Mathf.Max(maxY, y);
             }
         }
 
@@ -593,7 +780,7 @@ namespace UniverseLib.UI
 
             Image mainImage = mainObj.AddComponent<Image>();
             mainImage.type = Image.Type.Sliced;
-            mainImage.color = new Color(0, 0, 0, 0.5f);
+            mainImage.color = InputFieldBackgroundColor;
 
             InputField inputField = mainObj.AddComponent<InputField>();
             Navigation nav = inputField.navigation;
@@ -603,9 +790,7 @@ namespace UniverseLib.UI
             inputField.interactable = true;
             inputField.transition = Selectable.Transition.ColorTint;
             inputField.targetGraphic = mainImage;
-
-            RuntimeHelper.Instance.Internal_SetColorBlock(inputField, new Color(1, 1, 1, 1),
-                new Color(0.95f, 0.95f, 0.95f, 1.0f), new Color(0.78f, 0.78f, 0.78f, 1.0f));
+            SetInputFieldSelectableValues(inputField, mainImage);
 
             GameObject textArea = CreateUIObject("TextArea", mainObj);
             textArea.AddComponent<RectMask2D>();
@@ -729,16 +914,7 @@ namespace UniverseLib.UI
             scrollRect.verticalScrollbarVisibility = ScrollRect.ScrollbarVisibility.AutoHideAndExpandViewport;
             scrollRect.verticalScrollbarSpacing = -3f;
 
-            viewportObj.AddComponent<Mask>().showMaskGraphic = false;
-
-            Image viewportImage = viewportObj.AddComponent<Image>();
-            viewportImage.type = Image.Type.Sliced;
-            viewportImage.color = DropdownBackgroundColor;
-            viewportImage.raycastTarget = false;
-
-            Image contentImage = contentObj.AddComponent<Image>();
-            contentImage.color = DropdownBackgroundColor;
-            contentImage.raycastTarget = false;
+            viewportObj.AddComponent<RectMask2D>();
 
             Text labelText = labelObj.AddComponent<Text>();
             SetDropdownTextValues(labelText);
@@ -848,9 +1024,6 @@ namespace UniverseLib.UI
             viewportRect.sizeDelta = new Vector2(0f, 0.0f);
             viewportRect.offsetMax = new Vector2(-10.0f, 0.0f);
             viewportObj.AddComponent<RectMask2D>();
-            Image viewportImage = viewportObj.AddComponent<Image>();
-            viewportImage.color = new(0.1f, 0.1f, 0.1f, 0f);
-            viewportImage.raycastTarget = false;
 
             content = CreateUIObject("Content", viewportObj);
             RectTransform contentRect = content.GetComponent<RectTransform>();
@@ -986,8 +1159,7 @@ namespace UniverseLib.UI
             viewportRect.anchorMax = Vector2.one;
             viewportRect.pivot = new Vector2(0.0f, 1.0f);
             viewportRect.offsetMax = new Vector2(-28, 0);
-            viewportObj.AddComponent<Image>().color = new(0.1f, 0.1f, 0.1f, 1);
-            viewportObj.AddComponent<Mask>().showMaskGraphic = false;
+            viewportObj.AddComponent<RectMask2D>();
 
             content = CreateUIObject("Content", viewportObj);
             SetLayoutGroup<VerticalLayoutGroup>(content, true, false, true, true, childAlignment: TextAnchor.UpperLeft);
@@ -1068,8 +1240,7 @@ namespace UniverseLib.UI
             viewportRect.anchorMin = Vector2.zero;
             viewportRect.anchorMax = Vector2.one;
             viewportRect.pivot = new Vector2(0.0f, 1.0f);
-            viewportObj.AddComponent<Image>().color = new(0.1f, 0.1f, 0.1f, 1);
-            viewportObj.AddComponent<Mask>().showMaskGraphic = false;
+            viewportObj.AddComponent<RectMask2D>();
 
             // Input Field
 
@@ -1080,7 +1251,7 @@ namespace UniverseLib.UI
             textComp.fontSize = fontSize;
             textComp.horizontalOverflow = HorizontalWrapMode.Wrap;
             inputField.Component.lineType = InputField.LineType.MultiLineNewline;
-            inputField.Component.targetGraphic.color = color;
+            SetInputFieldSelectableValues(inputField.Component, inputField.Component.targetGraphic, color);
             inputField.PlaceholderText.alignment = TextAnchor.UpperLeft;
             inputField.PlaceholderText.fontSize = fontSize;
             inputField.PlaceholderText.horizontalOverflow = HorizontalWrapMode.Wrap;
@@ -1094,7 +1265,7 @@ namespace UniverseLib.UI
             contentRect.offsetMin = new Vector2(2, 0);
             contentRect.offsetMax = new Vector2(2, 0);
             inputField.Component.lineType = InputField.LineType.MultiLineNewline;
-            inputField.Component.targetGraphic.color = color;
+            SetInputFieldSelectableValues(inputField.Component, inputField.Component.targetGraphic, color);
 
             // Slider
 
