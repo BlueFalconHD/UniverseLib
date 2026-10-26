@@ -240,15 +240,47 @@ public static class UniversalUI
         BackupShader = UIBundle.LoadAsset<Shader>("DefaultUI");
         BackupShader.hideFlags = HideFlags.HideAndDontSave;
         UnityEngine.Object.DontDestroyOnLoad(BackupShader);
-        // Fix for games which don't ship with 'UI/Default' shader.
-        if (Graphic.defaultGraphicMaterial.shader != null &&
-            Graphic.defaultGraphicMaterial.shader.name != "UI/Default")
+
+        // Keep the game's own UI shader whenever this GPU can run it.
+        Shader runtimeShader = Graphic.defaultGraphicMaterial.shader;
+        if (runtimeShader != null && runtimeShader.name == "UI/Default" && runtimeShader.isSupported)
         {
-            Universe.Log("This game does not ship with the 'UI/Default' shader, using manual Default Shader...");
-            Graphic.defaultGraphicMaterial.shader = BackupShader;
+            BackupShader = runtimeShader;
+            return;
+        }
+
+        // The bundled DefaultUI shader has no Metal variant, so on macOS it renders magenta. Prefer a supported
+        // built-in shader over it.
+        if (!BackupShader.isSupported && TryFindSupportedShader(out Shader builtInShader))
+        {
+            Universe.Log($"Bundled UI shader is not supported here, using built-in '{builtInShader.name}' instead...");
+            BackupShader = builtInShader;
+            UsingStencilFreeShader = true;
         }
         else
-            BackupShader = Graphic.defaultGraphicMaterial.shader;
+        {
+            Universe.Log("This game does not ship with the 'UI/Default' shader, using manual Default Shader...");
+        }
+
+        Graphic.defaultGraphicMaterial.shader = BackupShader;
+    }
+
+    /// <summary>True when the UI uses a built-in fallback shader that ignores stencil masks.</summary>
+    internal static bool UsingStencilFreeShader { get; private set; }
+
+    static readonly string[] BuiltInUIShaders = { "UI/Default", "Sprites/Default", "Unlit/Transparent" };
+
+    static bool TryFindSupportedShader(out Shader shader)
+    {
+        foreach (string shaderName in BuiltInUIShaders)
+        {
+            shader = Shader.Find(shaderName);
+            if (shader != null && shader.isSupported)
+                return true;
+        }
+
+        shader = null;
+        return false;
     }
 
     static void ForceLoadBundle()

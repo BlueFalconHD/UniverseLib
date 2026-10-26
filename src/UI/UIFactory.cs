@@ -15,6 +15,22 @@ namespace UniverseLib.UI
     /// </summary>
     public static class UIFactory
     {
+        // Stencil masks hide everything when the UI shader has no stencil support (the built-in fallback
+        // shaders UniversalUI uses on macOS); RectMask2D clips the same rectangles without a stencil.
+        internal static void AddMask(GameObject obj, bool showMaskGraphic = true)
+        {
+            if (!UniversalUI.UsingStencilFreeShader)
+            {
+                obj.AddComponent<Mask>().showMaskGraphic = showMaskGraphic;
+                return;
+            }
+
+            if (!obj.GetComponent<RectMask2D>())
+                obj.AddComponent<RectMask2D>();
+            if (!showMaskGraphic && obj.GetComponent<Graphic>() is Graphic graphic)
+                graphic.color = new Color(graphic.color.r, graphic.color.g, graphic.color.b, 0f);
+        }
+
         internal static Vector2 largeElementSize = new(100, 30);
         internal static Vector2 smallElementSize = new(25, 25);
         internal static Color defaultTextColor = Color.white;
@@ -49,6 +65,10 @@ namespace UniverseLib.UI
             text.color = defaultTextColor;
             text.font = UniversalUI.DefaultFont;
             text.fontSize = 14;
+            // The fallback UI shaders read colour from the alpha-only font atlas and draw text black;
+            // the font's own material uses Unity's built-in text shader instead.
+            if (UniversalUI.UsingStencilFreeShader && UniversalUI.DefaultFont && UniversalUI.DefaultFont.material)
+                text.material = UniversalUI.DefaultFont.material;
         }
 
         internal static void SetDefaultSelectableValues(Selectable selectable)
@@ -651,7 +671,7 @@ namespace UniverseLib.UI
             scrollRect.verticalScrollbarVisibility = ScrollRect.ScrollbarVisibility.AutoHideAndExpandViewport;
             scrollRect.verticalScrollbarSpacing = -3f;
 
-            viewportObj.AddComponent<Mask>().showMaskGraphic = false;
+            AddMask(viewportObj, false);
 
             Image viewportImage = viewportObj.AddComponent<Image>();
             viewportImage.type = Image.Type.Sliced;
@@ -762,7 +782,7 @@ namespace UniverseLib.UI
             viewportRect.offsetMax = new Vector2(-10.0f, 0.0f);
             viewportObj.AddComponent<RectMask2D>();
             viewportObj.AddComponent<Image>().color = new(0.1f, 0.1f, 0.1f, 1);
-            viewportObj.AddComponent<Mask>();
+            AddMask(viewportObj);
 
             content = CreateUIObject("Content", viewportObj);
             RectTransform contentRect = content.GetComponent<RectTransform>();
@@ -791,7 +811,7 @@ namespace UniverseLib.UI
             GameObject sliderContainer = CreateVerticalGroup(mainObj, "SliderContainer",
                 false, false, true, true, 0, default, new Color(0.05f, 0.05f, 0.05f));
             SetLayoutElement(sliderContainer, minWidth: 25, flexibleWidth: 0, flexibleHeight: 9999);
-            sliderContainer.AddComponent<Mask>().showMaskGraphic = false;
+            AddMask(sliderContainer, false);
 
             CreateSliderScrollbar(sliderContainer, out Slider slider);
 
@@ -816,7 +836,7 @@ namespace UniverseLib.UI
         public static GameObject CreateSliderScrollbar(GameObject parent, out Slider slider)
         {
             GameObject mainObj = CreateUIObject("SliderScrollbar", parent, smallElementSize);
-            mainObj.AddComponent<Mask>().showMaskGraphic = false;
+            AddMask(mainObj, false);
             mainObj.AddComponent<Image>().color = new(0.1f, 0.1f, 0.1f, 1);
 
             GameObject bgImageObj = CreateUIObject("Background", mainObj);
@@ -827,7 +847,7 @@ namespace UniverseLib.UI
             bgImage.type = Image.Type.Sliced;
             bgImage.color = new Color(0.05f, 0.05f, 0.05f, 1.0f);
 
-            bgImageObj.AddComponent<Mask>();
+            AddMask(bgImageObj);
 
             RectTransform bgRect = bgImageObj.GetComponent<RectTransform>();
             bgRect.pivot = new Vector2(0, 1);
@@ -899,7 +919,7 @@ namespace UniverseLib.UI
             viewportRect.pivot = new Vector2(0.0f, 1.0f);
             viewportRect.offsetMax = new Vector2(-28, 0);
             viewportObj.AddComponent<Image>().color = new(0.1f, 0.1f, 0.1f, 1);
-            viewportObj.AddComponent<Mask>().showMaskGraphic = false;
+            AddMask(viewportObj, false);
 
             content = CreateUIObject("Content", viewportObj);
             SetLayoutGroup<VerticalLayoutGroup>(content, true, false, true, true, childAlignment: TextAnchor.UpperLeft);
@@ -919,7 +939,7 @@ namespace UniverseLib.UI
             scrollBarRect.offsetMin = new Vector2(-25, 0);
             SetLayoutGroup<VerticalLayoutGroup>(scrollBarObj, false, true, true, true);
             scrollBarObj.AddComponent<Image>().color = new(0.1f, 0.1f, 0.1f, 1);
-            scrollBarObj.AddComponent<Mask>().showMaskGraphic = false;
+            AddMask(scrollBarObj, false);
 
             GameObject hiddenBar = CreateScrollbar(scrollBarObj, "HiddenScrollviewScroller", out Scrollbar hiddenScrollbar);
             hiddenScrollbar.SetDirection(Scrollbar.Direction.BottomToTop, true);
@@ -981,7 +1001,7 @@ namespace UniverseLib.UI
             viewportRect.anchorMax = Vector2.one;
             viewportRect.pivot = new Vector2(0.0f, 1.0f);
             viewportObj.AddComponent<Image>().color = new(0.1f, 0.1f, 0.1f, 1);
-            viewportObj.AddComponent<Mask>().showMaskGraphic = false;
+            AddMask(viewportObj, false);
 
             // Input Field
 
@@ -1014,7 +1034,7 @@ namespace UniverseLib.UI
             SetLayoutGroup<VerticalLayoutGroup>(scrollBarObj, true, true, true, true);
             SetLayoutElement(scrollBarObj, minWidth: 25, flexibleWidth: 0, flexibleHeight: 9999);
             scrollBarObj.AddComponent<Image>().color = new(0.1f, 0.1f, 0.1f, 1);
-            scrollBarObj.AddComponent<Mask>().showMaskGraphic = false;
+            AddMask(scrollBarObj, false);
 
             GameObject hiddenBar = CreateScrollbar(scrollBarObj, "HiddenScrollviewScroller", out Scrollbar hiddenScrollbar);
             hiddenScrollbar.SetDirection(Scrollbar.Direction.BottomToTop, true);
